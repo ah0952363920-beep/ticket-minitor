@@ -1,80 +1,54 @@
-const { chromium } = require('playwright');
+import requests
+from playwright.sync_api import sync_playwright
+import os
 
-const URL =
-  'https://guardians.fami.life/UTK0204_?PERFORMANCE_ID=P197DSBD&PRODUCT_ID=P15UU08Q';
+URL = "https://guardians.fami.life/UTK0204_?PERFORMANCE_ID=P197DSBD&PRODUCT_ID=P15UU08Q"
 
-(async () => {
-  const browser = await chromium.launch({
-    headless: true
-  });
+DISCORD_WEBHOOK = os.environ["DISCORD_WEBHOOK"]
 
-  const page = await browser.newPage();
+TARGET_AREAS = [
+    "搖滾熱力區",
+    "應援熱力區"
+]
 
-  console.log('前往頁面...');
+def send_discord(msg):
+    requests.post(DISCORD_WEBHOOK, json={
+        "content": msg
+    })
 
-  await page.goto(URL, {
-    waitUntil: 'networkidle',
-    timeout: 60000
-  });
+with sync_playwright() as p:
+    browser = p.chromium.launch(
+        headless=True,
+        args=[
+            "--disable-blink-features=AutomationControlled"
+        ]
+    )
 
-  // 等待票區表格
-  await page.waitForTimeout(5000);
+    page = browser.new_page()
 
-  // 截圖
-  await page.screenshot({
-    path: 'screenshot.png',
-    fullPage: true
-  });
+    page.goto(URL, wait_until="networkidle", timeout=120000)
 
-  // 取得頁面文字
-  const content = await page.locator('body').innerText();
+    content = page.content()
 
-  console.log(content);
+    found = []
 
-  // ====== 關鍵字判斷 ======
-  const soldOutKeywords = [
-    '已售完',
-    '暫無票券',
-    '無可售票券'
-  ];
+    for area in TARGET_AREAS:
+        if area in content:
+            # 找區域附近文字
+            idx = content.find(area)
+            nearby = content[idx:idx+500]
 
-  const hasSoldOutKeyword = soldOutKeywords.some(k =>
-    content.includes(k)
-  );
+            if "已售完" not in nearby:
+                found.append(area)
 
-  // 偵測可能有票的字樣
-  const possibleTicketKeywords = [
-    '空位',
-    '剩餘',
-    '可售',
-    '立即購票'
-  ];
+    if found:
+        message = "🔥 發現釋票！\n\n"
 
-  const hasTicketKeyword = possibleTicketKeywords.some(k =>
-    content.includes(k)
-  );
+        for f in found:
+            message += f"✅ {f}\n"
 
-  const hasTicket =
-    !hasSoldOutKeyword && hasTicketKeyword;
+        message += f"\n購票連結：\n{URL}"
 
-  console.log('是否可能有票：', hasTicket);
+        send_discord(message)
 
-  if (hasTicket) {
-    console.log('🎫 發現可能釋票！');
-
-    if (process.env.DISCORD_WEBHOOK) {
-      await fetch(process.env.DISCORD_WEBHOOK, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          content:
-            `🎫 富邦悍將可能釋票！\n${URL}`
-        })
-      });
-    }
-  }
-
-  await browser.close();
-})();
+    browser.close()
