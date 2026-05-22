@@ -1,7 +1,2 @@
-{
-  "name": "ticket-monitor",
-  "version": "1.0.0",
-  "dependencies": {
-    "playwright": "^1.54.0"
-  }
-}
+playwright
+requests
